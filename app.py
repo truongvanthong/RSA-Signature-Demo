@@ -5,16 +5,20 @@ from cryptography.hazmat.primitives.asymmetric import padding, rsa
 
 st.title("RSA Signature Demo")
 
+
+# Tạo một private key với key size là 1024
 if 'key_size' not in st.session_state:
-    st.session_state.key_size = 2048  # default value or any value you want
+    st.session_state.key_size = 1024
     st.session_state.private_key = rsa.generate_private_key(
         public_exponent=65537,
         key_size=st.session_state.key_size,
         backend=default_backend()
     )
 
+# Tạo một radio button để cho phép người dùng chọn key size
 key_size_temp = st.radio("Generate RSA Key Size", [512, 1024, 2048, 4096], index=[512, 1024, 2048, 4096].index(st.session_state.key_size))
 
+# Nếu người dùng chọn một key size khác với key size hiện tại thì tạo một private key mới
 if key_size_temp != st.session_state.key_size:
     st.session_state.key_size = key_size_temp
     st.session_state.private_key = rsa.generate_private_key(
@@ -22,10 +26,34 @@ if key_size_temp != st.session_state.key_size:
         key_size=st.session_state.key_size,
         backend=default_backend()
     )
-    if "provide_signature" in st.session_state:
+    if "provide_signature" in st.session_state: 
         del st.session_state["provide_signature"]
     if "file_bytes" in st.session_state:
         del st.session_state["file_bytes"]
+        
+# Tạo một public key từ private key       
+uploaded_public_key = st.file_uploader("Upload an existing public key (Optional)", key="publickey")
+uploaded_private_key = st.file_uploader("Upload an existing private key (Optional)", key="privatekey")
+
+if uploaded_public_key and uploaded_private_key:
+    try:
+        uploaded_public_pem = uploaded_public_key.read().decode("utf-8")
+        uploaded_private_pem = uploaded_private_key.read().decode("utf-8")
+
+        # Load keys from the uploaded PEM strings
+        private_key = serialization.load_pem_private_key(
+            uploaded_private_pem.encode(),
+            password=None,
+            backend=default_backend()
+        )
+        public_key = serialization.load_pem_public_key(
+            uploaded_public_pem.encode(),
+            backend=default_backend()
+        )
+
+        st.session_state.private_key = private_key
+    except:
+        st.error("Failed to load uploaded keys. Make sure they are valid PEM files.")
 
 private_key = st.session_state.private_key
 public_key = private_key.public_key()
@@ -51,8 +79,13 @@ with cols[1]:
 
 option = st.radio("Choose Functionality", ["Generate Signature", "Verify Signature"])
 
-hash_func = st.selectbox("Choose hash function:", ["SHA1", "MD5"])
-hash_choice = {"SHA1": hashes.SHA1(), "MD5": hashes.MD5()}[hash_func]
+hash_func = st.selectbox("Choose hash function:", ["SHA1", "SHA-256", "SHA-512", "MD5"])
+hash_choice = {
+    "SHA1": hashes.SHA1(),
+    "SHA-256": hashes.SHA256(),
+    "SHA-512": hashes.SHA512(),
+    "MD5": hashes.MD5()
+}[hash_func]
 
 def is_valid_hex(s):
     try:
@@ -60,7 +93,6 @@ def is_valid_hex(s):
         return True
     except ValueError:
         return False
-
 
 if option == "Generate Signature":
     uploaded_file = st.file_uploader("Choose a file to sign")
@@ -87,10 +119,15 @@ elif option == "Verify Signature":
         st.warning("Please generate a signature first!")
 
     uploaded_signature_file = st.file_uploader("Upload a signature file")
-    
+
+    # Thêm một text area để cho phép người dùng dán chữ ký
+    pasted_signature = st.text_area("Or paste the signature here", height=250)
+
     if uploaded_signature_file:
         uploaded_signature = uploaded_signature_file.read().decode("utf-8")
         st.session_state.uploaded_signature = uploaded_signature
+    elif pasted_signature:
+        uploaded_signature = pasted_signature
     else:
         uploaded_signature = st.session_state.get("uploaded_signature", "")
     
